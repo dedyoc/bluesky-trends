@@ -1,0 +1,10 @@
+[project]
+name = "bluesky-trends"
+version = "0.1.0"
+description = "Real-time streaming from atproto firehose websocket"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiokafka>=0.14.0",
+    "atproto>=0.0.67",
+]
