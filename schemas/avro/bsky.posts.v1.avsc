@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "BskyPost",
+  "namespace": "bsky.posts.v1",
+  "doc": "app.bsky.feed.post create event. Mirrors schemas.models.BskyPost.",
+  "fields": [
+    { "name": "did", "type": "string", "doc": "Author repo DID; Kafka partition key." },
+    { "name": "rkey", "type": "string" },
+    { "name": "cid", "type": "string" },
+    {
+      "name": "created_at",
+      "type": { "type": "long", "logicalType": "timestamp-micros" }
+    },
+    { "name": "text", "type": "string" },
+    {
+      "name": "langs",
+      "type": ["null", { "type": "array", "items": "string" }],
+      "default": null
+    },
+    { "name": "reply_parent", "type": ["null", "string"], "default": null },
+    { "name": "reply_root", "type": ["null", "string"], "default": null }
+  ]
+}

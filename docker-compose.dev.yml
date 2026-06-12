@@ -1,0 +1,58 @@
+# Local dev stack for v1 ingest. NOT for deployment — k8s lives in homelab-ops.
+# Redpanda stands in for Strimzi Kafka + Karapace (its built-in Schema Registry is
+# Confluent-SR wire-compatible, so the 5-byte magic+id framing matches prod exactly).
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --schema-registry-addr=0.0.0.0:8081
+    ports:
+      - "9092:9092"   # Kafka
+      - "8081:8081"   # Schema Registry (Confluent-compatible)
+      - "9644:9644"   # Admin / metrics
+    healthcheck:
+      # rpk has no --format json for `cluster health` in v24.2.x, so match the text
+      # output. -i tolerates case and the loose pattern tolerates whitespace changes.
+      test: ["CMD-SHELL", "rpk cluster health | grep -qi 'healthy.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+
+  # Pre-create topics so the ingest service never auto-creates with wrong partition counts.
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create bsky.posts.v1   -p 6 -r 1 --brokers redpanda:9092 || true
+        rpk topic create bsky.likes.v1   -p 6 -r 1 --brokers redpanda:9092 || true
+        rpk topic create bsky.follows.v1 -p 6 -r 1 --brokers redpanda:9092 || true
+        rpk topic create bsky.dlq.v1     -p 1 -r 1 --brokers redpanda:9092 || true
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bsky
+      POSTGRES_PASSWORD: bsky
+      POSTGRES_DB: bsky_ingest
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./ingest/sql/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bsky -d bsky_ingest"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "BskyFollow",
+  "namespace": "bsky.follows.v1",
+  "doc": "app.bsky.graph.follow create event. Mirrors schemas.models.BskyFollow.",
+  "fields": [
+    { "name": "did", "type": "string", "doc": "Author repo DID; Kafka partition key." },
+    { "name": "rkey", "type": "string" },
+    { "name": "cid", "type": "string" },
+    {
+      "name": "created_at",
+      "type": { "type": "long", "logicalType": "timestamp-micros" }
+    },
+    { "name": "subject_did", "type": "string" }
+  ]
+}

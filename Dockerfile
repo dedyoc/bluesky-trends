@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
@@ -11,6 +11,7 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --frozen --no-dev
 
-COPY src/ /app/src/
+COPY ingest/ /app/ingest/
+COPY schemas/ /app/schemas/
 
-CMD ["python", "src/main.py"]
+CMD ["uv", "run", "python", "-m", "ingest.main"]
