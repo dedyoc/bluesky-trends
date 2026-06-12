@@ -11,13 +11,12 @@
 - Ingest: persist the Jetstream cursor atomically AFTER successful Kafka produce,
   not before. Reconnect with backoff + jitter; resume from cursor.
 - Producers: idempotence enabled; keys chosen for partition affinity (e.g. by DID).
-- Consumers/sinks: ClickHouse writes are batched (>= <REPLACE: 10k> rows or
-  <REPLACE: 5s>) or use async_insert. NEVER row-by-row inserts.
+- Consumers/sinks: ClickHouse writes are batched (>= 10k rows or 5s) or use async_insert. NEVER row-by-row inserts.
 - All events validated against schemas/ models at the boundary; on schema mismatch,
   route to a dead-letter topic `bsky.dlq.v1` — never drop silently.
 
 ## Flink (v3)
-- Event time + watermarks (bounded out-of-orderness <REPLACE: 30s>); never processing time
+- Event time + watermarks (bounded out-of-orderness 30s); never processing time
   for trend windows. Keyed state with TTL. Exactly-once checkpoints to MinIO.
 - One job, one responsibility. New computation = new job file, not a bigger job.
 
