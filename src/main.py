@@ -70,15 +70,15 @@ def measure_events_per_second(func: callable) -> callable:
 
 async def main() -> None:
     # initialize the kafka producer
-    # producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
-    # await producer.start()
+    producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
+    await producer.start()
 
     client = AsyncFirehoseSubscribeReposClient()
 
     async def signal_handler() -> None:
         print('shutting down gracefully...')
         await client.stop()
-        # await producer.stop()
+        await producer.stop()
 
     # attach signal handlers to the current event loop
     loop = asyncio.get_running_loop()
@@ -109,13 +109,11 @@ async def main() -> None:
                 "text": inlined_text
             }
             
-            # serialize dictionary to bytes and send to kafka asynchronously
             try:
-                print(f"[TEST SINK] {json.dumps(payload, indent=2)}")
-                # await producer.send_and_wait(
-                #     KAFKA_TOPIC, 
-                #     value=json.dumps(payload).encode('utf-8')
-                # )
+                await producer.send_and_wait(
+                    KAFKA_TOPIC, 
+                    value=json.dumps(payload).encode('utf-8')
+                )
                 pass
             except Exception as e:
                 print(f'kafka delivery failure: {e}')
@@ -125,7 +123,7 @@ async def main() -> None:
     except asyncio.CancelledError:
         pass
     finally:
-        # await producer.stop()
+        await producer.stop()
         pass
 
 if __name__ == '__main__':

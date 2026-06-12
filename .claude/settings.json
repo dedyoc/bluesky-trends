@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/format.sh" }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "grep -qiE 'kubectl (apply|delete)|helm (install|upgrade)' <<< \"$CLAUDE_TOOL_INPUT\" && { echo 'Blocked: deploys happen via homelab-ops + ArgoCD, not from this repo.' >&2; exit 2; } || exit 0" }]
+      }
+    ]
+  }
+}
