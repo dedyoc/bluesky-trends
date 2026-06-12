@@ -9,7 +9,7 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "grep -qiE 'kubectl (apply|delete)|helm (install|upgrade)' <<< \"$CLAUDE_TOOL_INPUT\" && { echo 'Blocked: deploys happen via homelab-ops + ArgoCD, not from this repo.' >&2; exit 2; } || exit 0" }]
+        "hooks": [{ "type": "command", "command": "echo \"$CLAUDE_TOOL_INPUT\" | grep -qiE 'kubectl (apply|delete)|helm (install|upgrade)' && { echo 'Blocked: deploys happen via homelab-ops + ArgoCD, not from this repo.' >&2; exit 2; } || exit 0" }]
       }
     ]
   }
