@@ -5,6 +5,42 @@ description = "Real-time streaming from atproto firehose websocket"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiokafka>=0.14.0",
-    "atproto>=0.0.67",
+    "asyncpg>=0.30.0",
+    "confluent-kafka[avro,schemaregistry]>=2.6.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "structlog>=24.4.0",
+    "websockets>=13.1",
 ]
+
+[dependency-groups]
+dev = [
+    "asyncpg-stubs>=0.30.0",
+    "mypy>=1.13.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.7.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# src/main.py is the legacy Firehose prototype, kept for reference until the new
+# ingest service has passing tests (then removed). Not part of the v1 codebase.
+extend-exclude = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+files = ["ingest", "schemas", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

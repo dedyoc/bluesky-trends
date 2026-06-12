@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "DlqEnvelope",
+  "namespace": "bsky.dlq.v1",
+  "doc": "Dead-letter wrapper for events that failed validation. Mirrors schemas.models.DlqEnvelope.",
+  "fields": [
+    { "name": "raw_payload", "type": "string", "doc": "JSON-serialized original event." },
+    { "name": "error", "type": "string" },
+    { "name": "intended_topic", "type": "string" },
+    {
+      "name": "received_at",
+      "type": { "type": "long", "logicalType": "timestamp-micros" }
+    }
+  ]
+}
