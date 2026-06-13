@@ -29,4 +29,4 @@ cursor: ## Print the persisted cursor row(s) from Postgres
 		"SELECT stream_name, cursor, updated_at FROM ingest_cursors ORDER BY stream_name;"
 
 inject-dlq: ## Inject one malformed event through validate->produce_dlq into bsky.dlq.v1
-	$(COMPOSE) --profile ingest run --rm --no-deps ingest python -m ingest.dev_inject_dlq
+	$(COMPOSE) --profile ingest run --rm --no-deps ingest uv run --no-dev python -m ingest.dev_inject_dlq
