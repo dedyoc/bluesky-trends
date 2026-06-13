@@ -37,9 +37,15 @@ _AVRO_DIR = pathlib.Path(__file__).resolve().parent.parent / "schemas" / "avro"
 DeliveryCallback = Callable[[bool, int], None]
 
 
-def _to_avro_dict(model: BskyPost | BskyLike | BskyFollow | DlqEnvelope) -> dict[str, Any]:
-    """Pydantic -> plain dict for fastavro. datetime stays a datetime; the
-    timestamp-micros logical type handles the int conversion (tz-aware required)."""
+def _to_avro_dict(
+    model: BskyPost | BskyLike | BskyFollow | DlqEnvelope,
+    _ctx: SerializationContext,
+) -> dict[str, Any]:
+    """Pydantic -> plain dict for the Confluent AvroSerializer's ``to_dict`` callback.
+
+    The serializer invokes this as ``to_dict(obj, ctx)``, so the context arg is required
+    even though we don't use it. datetime stays a datetime; the timestamp-micros logical
+    type handles the int conversion (tz-aware required)."""
     return model.model_dump()
 
 

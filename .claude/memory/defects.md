@@ -23,6 +23,23 @@
   Rule: marts over event data are incremental models with explicit unique_key.
 
 ## Entries
+- [2026-06-13] Every Kafka produce crashed with `TypeError: _to_avro_dict() takes 1
+  positional argument but 2 were given` — Cause: the Confluent `AvroSerializer` invokes its
+  `to_dict` callback as `to_dict(obj, ctx)`, but `producer.py:_to_avro_dict` was defined with
+  only `(model)`. Unit tests missed it because `test_avro_roundtrip.py` calls fastavro
+  directly with `model.model_dump()`, never exercising the real serializer callback — only
+  the end-to-end run surfaced it (high-watermark stuck at 0) — Rule: the AvroSerializer
+  to_dict callback MUST take `(model, ctx)`; cover the real serializer path (not just
+  fastavro round-trip) in any test claiming to verify produce. (see ingest/producer.py)
+- [2026-06-13] docker-compose dev: topics silently never created + any container client
+  (incl. the ingest service) could not reach Kafka — Cause: redpanda advertised a single
+  `localhost:9092` listener, so in-network clients connecting to `redpanda:9092` were
+  redirected to localhost and refused; the `redpanda-init` topic-create used `--brokers`
+  (ignored by rpk in this image) guarded by `|| true`, masking the connection failure —
+  Rule: dev redpanda needs TWO listeners with distinct advertised addrs (internal
+  `redpanda:9092` for containers, external `localhost:19092` for the host); target rpk with
+  `-X brokers=...` not `--brokers`; don't `|| true` topic creation — tolerate only
+  ALREADY_EXISTS, fail loud otherwise. (see docker-compose.dev.yml)
 - [2026-06-13] Ingest cursor watermark advanced to the *highest* acked cursor — Cause:
   out-of-order/cross-partition delivery callbacks let a later success skip past an
   earlier failed/in-flight event, persisting a cursor over a gap (silent data loss on
