@@ -1,0 +1,15 @@
+{
+  "did": "did:plc:authorbad",
+  "time_us": 1700000000000004,
+  "kind": "commit",
+  "commit": {
+    "operation": "create",
+    "collection": "app.bsky.feed.post",
+    "rkey": "3kbadrkey",
+    "cid": "bafybad",
+    "record": {
+      "$type": "app.bsky.feed.post",
+      "createdAt": "2024-01-01T00:00:03.000Z"
+    }
+  }
+}

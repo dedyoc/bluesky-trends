@@ -1,0 +1,21 @@
+{
+  "did": "did:plc:author123",
+  "time_us": 1700000000000001,
+  "kind": "commit",
+  "commit": {
+    "operation": "create",
+    "collection": "app.bsky.feed.post",
+    "rkey": "3kpostrkey",
+    "cid": "bafypost",
+    "record": {
+      "$type": "app.bsky.feed.post",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "text": "hello bluesky",
+      "langs": ["en"],
+      "reply": {
+        "parent": { "uri": "at://did:plc:other/app.bsky.feed.post/parent", "cid": "bafyparent" },
+        "root": { "uri": "at://did:plc:other/app.bsky.feed.post/root", "cid": "bafyroot" }
+      }
+    }
+  }
+}

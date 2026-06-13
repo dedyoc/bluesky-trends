@@ -12,6 +12,8 @@ import asyncio
 import contextlib
 import signal
 import time
+from collections.abc import AsyncIterator
+from typing import Any, Protocol
 
 import structlog
 from pydantic import ValidationError
@@ -21,7 +23,31 @@ from ingest.cursor_store import CursorStore
 from ingest.jetstream_client import JetstreamClient
 from ingest.metrics import Metrics
 from ingest.parse import to_model
-from ingest.producer import IngestProducer, serialize_raw
+from ingest.producer import DeliveryCallback, IngestProducer, serialize_raw
+from schemas.models import BskyFollow, BskyLike, BskyPost
+
+
+class _Producer(Protocol):
+    """Minimal producer surface the consume loop depends on (lets tests inject a fake)."""
+
+    def produce(
+        self,
+        model: BskyPost | BskyLike | BskyFollow,
+        *,
+        cursor: int,
+        on_delivery: DeliveryCallback,
+    ) -> None: ...
+
+    def produce_dlq(self, raw_payload: str, error: str, intended_topic: str) -> None: ...
+
+    def poll(self, timeout: float = ...) -> None: ...
+
+    def flush(self, timeout: float = ...) -> int: ...
+
+
+class _EventSource(Protocol):
+    def events(self, cursor: int | None) -> AsyncIterator[dict[str, Any]]: ...
+
 
 log = structlog.get_logger("ingest.main")
 
@@ -96,6 +122,60 @@ class _CursorCheckpointer:
             self._saved_cursor = self._safe_cursor
 
 
+async def _consume(
+    settings: Settings,
+    stop: asyncio.Event,
+    *,
+    client: _EventSource,
+    producer: _Producer,
+    checkpointer: _CursorCheckpointer,
+    metrics: Metrics,
+    start_cursor: int | None,
+) -> None:
+    """The ingest loop, with collaborators injected so it can be tested without I/O."""
+    last_stats = time.monotonic()
+    async for event in client.events(start_cursor):
+        if stop.is_set():
+            break
+        now = time.monotonic()
+        event_cursor = event.get("time_us")
+        commit = event.get("commit")
+        collection = commit.get("collection", "unknown") if isinstance(commit, dict) else "unknown"
+
+        try:
+            model = to_model(event)
+        except ValueError:
+            # Not an ingestable shape (delete, account, unknown collection) — skip quietly.
+            pass
+        except (ValidationError, KeyError, TypeError) as exc:
+            # Malformed/lexicon-changed record: missing or wrong-typed fields. Never drop;
+            # route to the DLQ so the rate can be alerted on and the event replayed.
+            producer.produce_dlq(serialize_raw(event), repr(exc), intended_topic=str(collection))
+            metrics.record_dlq(reason=str(collection))
+        else:
+            if not isinstance(event_cursor, int):
+                # A parseable event with no usable time_us cursor would have to be produced
+                # without an ack-trackable cursor — DLQ it rather than drop.
+                producer.produce_dlq(
+                    serialize_raw(event),
+                    "missing or non-int time_us",
+                    intended_topic=str(collection),
+                )
+                metrics.record_dlq(reason="missing_time_us")
+            else:
+                # Register BEFORE produce so the watermark can never skip this cursor.
+                checkpointer.register(event_cursor)
+                producer.produce(model, cursor=event_cursor, on_delivery=checkpointer.on_ack)
+                metrics.record_event(collection, now=time.time())
+
+        producer.poll(0)
+        await checkpointer.maybe_save(now=now)
+
+        if now - last_stats >= settings.stats_interval_seconds:
+            metrics.log_stats(now=time.time())
+            last_stats = now
+
+
 async def run(settings: Settings, stop: asyncio.Event) -> None:
     metrics = Metrics()
     store = await CursorStore.connect(settings.postgres_dsn)
@@ -106,52 +186,16 @@ async def run(settings: Settings, stop: asyncio.Event) -> None:
     cursor = await store.load(settings.stream_name)
     log.info("ingest_starting", stream=settings.stream_name, resume_cursor=cursor)
 
-    last_stats = time.monotonic()
     try:
-        async for event in client.events(cursor):
-            if stop.is_set():
-                break
-            now = time.monotonic()
-            event_cursor = event.get("time_us")
-            commit = event.get("commit")
-            collection = (
-                commit.get("collection", "unknown") if isinstance(commit, dict) else "unknown"
-            )
-
-            try:
-                model = to_model(event)
-            except ValueError:
-                # Not an ingestable shape (delete, account, unknown collection) — skip quietly.
-                pass
-            except (ValidationError, KeyError, TypeError) as exc:
-                # Malformed/lexicon-changed record: missing or wrong-typed fields. Never drop;
-                # route to the DLQ so the rate can be alerted on and the event replayed.
-                producer.produce_dlq(
-                    serialize_raw(event), repr(exc), intended_topic=str(collection)
-                )
-                metrics.record_dlq(reason=str(collection))
-            else:
-                if not isinstance(event_cursor, int):
-                    # A parseable event with no usable time_us cursor would have to be
-                    # produced without an ack-trackable cursor — DLQ it rather than drop.
-                    producer.produce_dlq(
-                        serialize_raw(event),
-                        "missing or non-int time_us",
-                        intended_topic=str(collection),
-                    )
-                    metrics.record_dlq(reason="missing_time_us")
-                else:
-                    # Register BEFORE produce so the watermark can never skip this cursor.
-                    checkpointer.register(event_cursor)
-                    producer.produce(model, cursor=event_cursor, on_delivery=checkpointer.on_ack)
-                    metrics.record_event(collection, now=time.time())
-
-            producer.poll(0)
-            await checkpointer.maybe_save(now=now)
-
-            if now - last_stats >= settings.stats_interval_seconds:
-                metrics.log_stats(now=time.time())
-                last_stats = now
+        await _consume(
+            settings,
+            stop,
+            client=client,
+            producer=producer,
+            checkpointer=checkpointer,
+            metrics=metrics,
+            start_cursor=cursor,
+        )
     finally:
         log.info("ingest_draining")
         producer.flush(30.0)
