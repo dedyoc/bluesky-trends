@@ -23,4 +23,19 @@
   Rule: marts over event data are incremental models with explicit unique_key.
 
 ## Entries
-- (none yet)
+- [2026-06-13] Ingest cursor watermark advanced to the *highest* acked cursor — Cause:
+  out-of-order/cross-partition delivery callbacks let a later success skip past an
+  earlier failed/in-flight event, persisting a cursor over a gap (silent data loss on
+  restart) — Rule: advance the saved cursor only across a *contiguous* prefix of acked
+  cursors; a failed delivery pins the watermark below the gap. (see ingest/main.py
+  _CursorCheckpointer)
+- [2026-06-13] Malformed records could escape the DLQ — Cause: parse.py raises KeyError
+  on missing fields but the loop only caught ValueError/ValidationError, so a lexicon
+  change would crash the loop instead of DLQ-ing — Rule: catch (ValidationError, KeyError,
+  TypeError) at the parse boundary and route all to bsky.dlq.v1.
+- [2026-06-13] Events with missing/non-int time_us were silently skipped (neither produced
+  nor DLQ'd) — Cause: produce path guarded by `if isinstance(event_cursor, int)` with no
+  else branch — Rule: an untrackable event goes to the DLQ, never dropped.
+- [2026-06-13] DLQ produce had no delivery callback / BufferError handling — Cause: the
+  last-resort sink could itself fail silently — Rule: every produce goes through a helper
+  that retries on BufferError (poll-to-drain) and DLQ deliveries log failures at error.
