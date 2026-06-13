@@ -56,3 +56,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+  # The ingest service itself. Gated behind the "ingest" profile so a plain
+  # `docker compose up` (or `make up`) brings up ONLY infra — ingest is started
+  # separately (`make run-ingest`) so it can be killed/restarted for the crash-resume
+  # test without disturbing Redpanda/Postgres state (the persisted cursor must survive).
+  ingest:
+    profiles: ["ingest"]
+    build: .
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      # config.py reads env with the INGEST_ prefix. These point at the in-network
+      # services; Redpanda's built-in Schema Registry (8081) is Confluent-SR wire-compatible.
+      INGEST_KAFKA_BOOTSTRAP: redpanda:9092
+      INGEST_SCHEMA_REGISTRY_URL: http://redpanda:8081
+      INGEST_POSTGRES_DSN: postgresql://bsky:bsky@postgres:5432/bsky_ingest
+      INGEST_STREAM_NAME: jetstream-main
+    volumes:
+      # The Dockerfile does not COPY tests/ into the image; mount the malformed fixture
+      # read-only so the in-network DLQ injector (dev_inject_dlq) can read it.
+      - ./tests/fixtures:/app/tests/fixtures:ro
+    # Don't auto-restart: a manual Ctrl-C / SIGKILL must stay down for the crash-resume test.
+    restart: "no"
