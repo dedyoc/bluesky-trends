@@ -49,7 +49,7 @@ In **terminal 2**, consume a few Avro-framed messages:
 
 ```bash
 docker compose -f docker-compose.dev.yml exec redpanda \
-  rpk topic consume bsky.posts.v1 --brokers redpanda:9092 -n 5
+  rpk topic consume bsky.posts.v1 -X brokers=redpanda:9092 -n 5
 ```
 
 **Observe:** five messages arrive, each with a 5-byte Confluent wire prefix
@@ -131,7 +131,7 @@ Consume it:
 
 ```bash
 docker compose -f docker-compose.dev.yml exec redpanda \
-  rpk topic consume bsky.dlq.v1 --brokers redpanda:9092 -n 1
+  rpk topic consume bsky.dlq.v1 -X brokers=redpanda:9092 -n 1
 ```
 
 **Observe:** one DLQ message whose `DlqEnvelope` carries:

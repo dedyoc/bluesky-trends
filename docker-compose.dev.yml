@@ -11,11 +11,17 @@ services:
       - --memory=1G
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      # Two listeners with DISTINCT advertised addresses: a single advertised address can't
+      # serve both in-network containers and the host. Clients connect, then follow the
+      # advertised address back — so `internal` advertises `redpanda:9092` (containers:
+      # ingest, redpanda-init) and `external` advertises `localhost:19092` (host tools via
+      # the published port). With one localhost-advertised listener, container clients
+      # connect to redpanda:9092 but get redirected to localhost and fail.
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
       - --schema-registry-addr=0.0.0.0:8081
     ports:
-      - "9092:9092"   # Kafka
+      - "19092:19092" # Kafka (host access)
       - "8081:8081"   # Schema Registry (Confluent-compatible)
       - "9644:9644"   # Admin / metrics
     healthcheck:
@@ -35,11 +41,21 @@ services:
         condition: service_healthy
     entrypoint: ["/bin/bash", "-c"]
     command:
+      # `-X brokers=redpanda:9092` targets the broker's internal advertised listener.
+      # Tolerate "already exists" on re-run, but fail loud on any other error (a silent
+      # `|| true` previously masked a connection failure -> topics never got created).
+      # `$$` escapes compose's own variable interpolation so the shell sees a literal `$`.
       - |
-        rpk topic create bsky.posts.v1   -p 6 -r 1 --brokers redpanda:9092 || true
-        rpk topic create bsky.likes.v1   -p 6 -r 1 --brokers redpanda:9092 || true
-        rpk topic create bsky.follows.v1 -p 6 -r 1 --brokers redpanda:9092 || true
-        rpk topic create bsky.dlq.v1     -p 1 -r 1 --brokers redpanda:9092 || true
+        set -euo pipefail
+        create() {
+          out=$$(rpk topic create "$$1" -p "$$2" -r 1 -X brokers=redpanda:9092 2>&1) || true
+          echo "$$out"
+          echo "$$out" | grep -Eq 'OK|TOPIC_ALREADY_EXISTS' || { echo "FAILED to create $$1" >&2; exit 1; }
+        }
+        create bsky.posts.v1   6
+        create bsky.likes.v1   6
+        create bsky.follows.v1 6
+        create bsky.dlq.v1     1
 
   postgres:
     image: postgres:16-alpine
