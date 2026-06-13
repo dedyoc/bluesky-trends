@@ -1,0 +1,19 @@
+{
+  "did": "did:plc:author456",
+  "time_us": 1700000000000002,
+  "kind": "commit",
+  "commit": {
+    "operation": "create",
+    "collection": "app.bsky.feed.like",
+    "rkey": "3klikerkey",
+    "cid": "bafylike",
+    "record": {
+      "$type": "app.bsky.feed.like",
+      "createdAt": "2024-01-01T00:00:01.000Z",
+      "subject": {
+        "uri": "at://did:plc:other/app.bsky.feed.post/liked",
+        "cid": "bafyliked"
+      }
+    }
+  }
+}

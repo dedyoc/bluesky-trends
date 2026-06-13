@@ -1,0 +1,16 @@
+{
+  "did": "did:plc:author789",
+  "time_us": 1700000000000003,
+  "kind": "commit",
+  "commit": {
+    "operation": "create",
+    "collection": "app.bsky.graph.follow",
+    "rkey": "3kfollowrkey",
+    "cid": "bafyfollow",
+    "record": {
+      "$type": "app.bsky.graph.follow",
+      "createdAt": "2024-01-01T00:00:02.000Z",
+      "subject": "did:plc:followed999"
+    }
+  }
+}
