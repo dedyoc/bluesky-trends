@@ -140,6 +140,16 @@ docker compose -f docker-compose.dev.yml exec redpanda \
 - `intended_topic` — `app.bsky.feed.post`,
 - `received_at` — the inject time.
 
+> **Note — the running ingest service's `dlq_total` stays 0, and that's correct.**
+> `make inject-dlq` runs a *separate, short-lived* container (`docker compose run`), not the
+> `make run-ingest` process. It produces a real message to `bsky.dlq.v1`, but the
+> `dlq_total` you see in the service's `ingest_stats` logs is an **in-memory per-process**
+> counter that only counts events *that process* DLQ'd — it never sees the out-of-band
+> injection. Real Jetstream data is well-formed, so the service legitimately DLQs nothing.
+> **Verify the DLQ by consuming the topic (above), not by watching `dlq_total`.** A non-zero
+> `dlq_total` in the service logs would mean the live stream itself produced a malformed
+> record (e.g. a lexicon change) — that's the thing worth alerting on.
+
 ---
 
 ## Teardown
