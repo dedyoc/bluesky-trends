@@ -14,4 +14,7 @@ RUN uv sync --frozen --no-dev
 COPY ingest/ /app/ingest/
 COPY schemas/ /app/schemas/
 
-CMD ["uv", "run", "python", "-m", "ingest.main"]
+# --no-dev: the image was built with `uv sync --frozen --no-dev`; without this flag
+# `uv run` re-syncs the dev group (mypy/ruff/...) on every container start — slow, noisy,
+# and it pulls dev tooling into the runtime image. --no-dev uses the prebuilt runtime env.
+CMD ["uv", "run", "--no-dev", "python", "-m", "ingest.main"]
