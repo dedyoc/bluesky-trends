@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  Dev-only: allow the `default` user to connect over the network with no password.
+  The official image's entrypoint logs "neither CLICKHOUSE_USER nor CLICKHOUSE_PASSWORD is
+  set, disabling network access for user 'default'" and locks the user to localhost, so the
+  local clickhouse-client works but Grafana (a separate container) gets HTTP 403
+  "Authentication failed". Re-opening the default user with an empty password is fine for a
+  throwaway local stack; prod credentials live in homelab-ops, never here.
+
+  Mounted read-only to /etc/clickhouse-server/users.d/dev_default_user.xml.
+-->
+<clickhouse>
+  <users>
+    <default>
+      <password></password>
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>

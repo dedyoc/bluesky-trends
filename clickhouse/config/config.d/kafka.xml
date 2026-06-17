@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  librdkafka consumer settings for the Kafka table engine. auto.offset.reset is a librdkafka
+  property, not a table SETTING (CREATE TABLE ... SETTINGS kafka_auto_offset_reset rejects with
+  UNKNOWN_SETTING). `earliest` makes a clean-slate run consume the whole topic; ClickHouse also
+  defaults a brand-new consumer group to earliest, so this is belt-and-suspenders for the
+  deterministic verify (`make down -v`). Dev/local only.
+
+  Mounted read-only to /etc/clickhouse-server/config.d/kafka.xml.
+-->
+<clickhouse>
+  <kafka>
+    <auto_offset_reset>earliest</auto_offset_reset>
+  </kafka>
+</clickhouse>

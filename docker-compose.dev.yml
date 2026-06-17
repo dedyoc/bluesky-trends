@@ -73,6 +73,58 @@ services:
       timeout: 5s
       retries: 12
 
+  # ClickHouse sink: Kafka-engine table + MV -> ReplacingMergeTree mart (see
+  # clickhouse/init/001_posts.sql). Part of the default infra set (`make up`) so the
+  # ingest->CH path is up before ingest runs. Init SQL + the SR-URL profile fix are mounted
+  # read-only via the official image's standard config/init dirs.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      # The topic must exist before the Kafka engine starts polling; redpanda-init creates
+      # it and exits, so wait for it to COMPLETE (not just be healthy -- it has no healthcheck).
+      redpanda-init:
+        condition: service_completed_successfully
+    ports:
+      - "8123:8123" # HTTP (Grafana datasource, clients)
+      - "9000:9000" # native protocol (clickhouse-client)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ./clickhouse/init/001_posts.sql:/docker-entrypoint-initdb.d/001_posts.sql:ro
+      - ./clickhouse/config/users.d/avro_sr.xml:/etc/clickhouse-server/users.d/avro_sr.xml:ro
+      - ./clickhouse/config/users.d/dev_default_user.xml:/etc/clickhouse-server/users.d/dev_default_user.xml:ro
+      - ./clickhouse/config/config.d/kafka.xml:/etc/clickhouse-server/config.d/kafka.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 15s
+
+  # Grafana view over the posts mart. Profile-gated (like ingest) so `make up` stays lean;
+  # `make grafana` brings it up. Queries bsky.posts_dedup (FINAL) so replay dups don't inflate
+  # panels. Anonymous admin + plugin install are dev-only conveniences.
+  grafana:
+    profiles: ["grafana"]
+    image: grafana/grafana:11.2.0
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
   # The ingest service itself. Gated behind the "ingest" profile so a plain
   # `docker compose up` (or `make up`) brings up ONLY infra — ingest is started
   # separately (`make run-ingest`) so it can be killed/restarted for the crash-resume

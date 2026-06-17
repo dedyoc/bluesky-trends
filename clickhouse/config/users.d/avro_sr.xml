@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  Load-bearing fix for the AvroConfluent + materialized-view "Empty Schema Registry URL" bug:
+  format_avro_schema_registry_url set only in the Kafka table's SETTINGS does not always
+  propagate to the background MV insert thread, leaving bsky.posts silently empty while the
+  server log shows "Empty Schema Registry URL". Setting it on the `default` profile puts it in
+  every thread's query context (including the streaming consumer), which is where the
+  table-level setting fails to reach.
+
+  Mounted read-only to /etc/clickhouse-server/users.d/avro_sr.xml. Dev/local only.
+-->
+<clickhouse>
+  <profiles>
+    <default>
+      <format_avro_schema_registry_url>http://redpanda:8081</format_avro_schema_registry_url>
+    </default>
+  </profiles>
+</clickhouse>

@@ -1,0 +1,12 @@
+# Provisioner: load dashboard JSON from the mounted dashboards dir. Dev/local only.
+apiVersion: 1
+
+providers:
+  - name: bsky
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
