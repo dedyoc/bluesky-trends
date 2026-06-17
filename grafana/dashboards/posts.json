@@ -1,0 +1,75 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total posts (deduped)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS total FROM bsky.posts_dedup",
+          "format": 1,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Posts per minute (event time)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 50 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT toStartOfMinute(created_at) AS time, count() AS posts FROM bsky.posts_dedup GROUP BY time ORDER BY time",
+          "format": 0,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Top languages",
+      "type": "barchart",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "orientation": "horizontal", "xField": "lang", "legend": { "showLegend": false } },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "bsky-clickhouse" },
+          "queryType": "sql",
+          "rawSql": "SELECT lang, count() AS posts FROM bsky.posts_dedup ARRAY JOIN langs AS lang GROUP BY lang ORDER BY posts DESC LIMIT 15",
+          "format": 1,
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["bsky", "v1"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Bluesky posts (v1)",
+  "uid": "bsky-posts-v1",
+  "version": 1,
+  "weekStart": ""
+}

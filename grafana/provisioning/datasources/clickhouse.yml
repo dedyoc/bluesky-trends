@@ -1,0 +1,17 @@
+# Provisioned ClickHouse datasource (grafana-clickhouse-datasource plugin). Dev/local only.
+# Talks to the in-network clickhouse service over HTTP (8123); default database bsky.
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: bsky-clickhouse
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      defaultDatabase: bsky
+      username: default
+    # default user has an empty password in dev (clickhouse/config/users.d/dev_default_user.xml)

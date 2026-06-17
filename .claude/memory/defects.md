@@ -23,6 +23,26 @@
   Rule: marts over event data are incremental models with explicit unique_key.
 
 ## Entries
+- [2026-06-17] Grafana -> ClickHouse failed with `Code: 516 Authentication failed` (HTTP 403)
+  even though local clickhouse-client worked — Cause: the official clickhouse-server image
+  entrypoint, when neither CLICKHOUSE_USER nor CLICKHOUSE_PASSWORD is set, logs "disabling
+  network access for user 'default'" and locks `default` to localhost. Local CLI (unix/local)
+  works; any OTHER container (Grafana) connecting over the network is rejected. The datasource
+  also sent no username/password — Rule: in dev, explicitly open the `default` user over the
+  network with an empty password via users.d (clickhouse/config/users.d/dev_default_user.xml)
+  AND set `username: default` in the provisioned datasource; verify cross-container access with
+  the Grafana /api/ds/query proxy, not just local clickhouse-client. (Prod creds live in
+  homelab-ops, never here.)
+- [2026-06-17] ClickHouse refused to start the Kafka-engine init (`Code: 115 UNKNOWN_SETTING:
+  Unknown setting 'kafka_auto_offset_reset' for storage Kafka`) — Cause: assumed offset-reset
+  was a `CREATE TABLE ... SETTINGS kafka_*` option; it is a librdkafka *consumer* property, set
+  in a `<clickhouse><kafka><auto_offset_reset>` config-file section, not a table SETTING. (CH
+  also already defaults a brand-new consumer group with no stored offset to `earliest`, so a
+  clean-slate run reads the whole topic regardless.) — Rule: librdkafka tunables
+  (auto.offset.reset, etc.) go in config.d/kafka.xml under `<kafka>`; only the documented
+  `kafka_*` table settings (broker_list/topic_list/group_name/format/num_consumers/
+  max_block_size/poll_max_batch_size/flush_interval_ms/...) belong in the SETTINGS clause.
+  (see clickhouse/init/001_posts.sql + clickhouse/config/config.d/kafka.xml)
 - [2026-06-13] Every Kafka produce crashed with `TypeError: _to_avro_dict() takes 1
   positional argument but 2 were given` — Cause: the Confluent `AvroSerializer` invokes its
   `to_dict` callback as `to_dict(obj, ctx)`, but `producer.py:_to_avro_dict` was defined with

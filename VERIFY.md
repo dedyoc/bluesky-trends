@@ -6,12 +6,18 @@ Manual runbook to confirm the three behaviors that gate v1 sign-off:
 - **(b)** ingest resumes from the persisted Postgres cursor across a restart
 - **(c)** a malformed event reaches `bsky.dlq.v1`
 
+Stage B (ClickHouse sink + Grafana) adds:
+
+- **(d)** events flow `bsky.posts.v1` → ClickHouse `bsky.posts` mart
+- **(e)** SIGKILL replay duplicates collapse in the ReplacingMergeTree mart
+- **(f)** Grafana renders the posts dashboard from ClickHouse
+
 This is local-dev only (docker-compose). Nothing here deploys anything — k8s lives in
 `homelab-ops`. All commands are run from the repo root.
 
 ## Topology
 
-- **infra** (Redpanda + topic init + Postgres) comes up with `make up`.
+- **infra** (Redpanda + topic init + Postgres + ClickHouse) comes up with `make up`.
 - **ingest** is gated behind the `ingest` compose profile and started separately with
   `make run-ingest`, so you can kill and restart it for the resume test **without** tearing
   down infra — the persisted cursor in Postgres must survive across ingest restarts.
@@ -149,6 +155,101 @@ docker compose -f docker-compose.dev.yml exec redpanda \
 > **Verify the DLQ by consuming the topic (above), not by watching `dlq_total`.** A non-zero
 > `dlq_total` in the service logs would mean the live stream itself produced a malformed
 > record (e.g. a lexicon change) — that's the thing worth alerting on.
+
+---
+
+## (d) Posts flow into the ClickHouse mart
+
+ClickHouse comes up as part of `make up`. It runs a Kafka-engine table (`bsky.posts_queue`)
+that reads `bsky.posts.v1` as `AvroConfluent`, a materialized view (`bsky.posts_mv`) that lands
+into the `ReplacingMergeTree` mart (`bsky.posts`), and a `bsky.posts_dedup` view (`… FINAL`)
+for clean reads. See `clickhouse/init/001_posts.sql`.
+
+First confirm the schema-registry setting actually loaded (the load-bearing fix for the
+empty-MV bug — see `clickhouse/config/users.d/avro_sr.xml`):
+
+```bash
+docker compose -f docker-compose.dev.yml exec -T clickhouse clickhouse-client --query \
+  "SELECT value FROM system.settings WHERE name='format_avro_schema_registry_url'"
+# expect: http://redpanda:8081
+```
+
+Run ingest for ~30s (`make run-ingest`), then:
+
+```bash
+make ch-count
+```
+
+**Observe:** `raw` and `deduped` counts both > 0 (and equal, before any replay). Spot-check a
+row — `langs` populated as an array, `created_at` a real timestamp (micros scaled correctly,
+not ×1000 off), and a post with no langs landing as `[]` (not a parse failure):
+
+```bash
+docker compose -f docker-compose.dev.yml exec -T clickhouse clickhouse-client --database bsky --query \
+  "SELECT did, rkey, created_at, langs FROM posts ORDER BY ingested_at DESC LIMIT 5 FORMAT Vertical"
+```
+
+> If `posts_queue` has data (`SELECT count() FROM bsky.posts_queue` — note: consuming a Kafka
+> engine table directly advances its offset, use sparingly) but `posts` stays empty, suspect the
+> empty-SR-URL MV bug — re-check the setting query above and the CH server log for
+> `Empty Schema Registry URL`.
+
+---
+
+## (e) Replay duplicates collapse in the mart
+
+This consumes the bounded SIGKILL replay overlap from **(b2)** and proves the
+`ReplacingMergeTree` dedupes on `(did, rkey)`.
+
+1. With ingest running and rows landing, note `make ch-count` → `raw == deduped` (call it **N**).
+2. SIGKILL ingest, then restart it (exactly the **(b2)** procedure):
+
+   ```bash
+   docker compose -f docker-compose.dev.yml kill -s SIGKILL ingest
+   make run-ingest
+   ```
+
+3. After the replay, `make ch-count`:
+   - `raw` has risen **above** `deduped` — the re-produced overlap landed as duplicate parts.
+   - `deduped` (the `FINAL` count) stays consistent — RMT collapses the `(did, rkey)` dups.
+4. Force the background merge to make the collapse physical, then re-count:
+
+   ```bash
+   docker compose -f docker-compose.dev.yml exec -T clickhouse clickhouse-client --query \
+     "OPTIMIZE TABLE bsky.posts FINAL"
+   make ch-count
+   ```
+
+**Observe:** after `OPTIMIZE … FINAL`, `raw == deduped` again — duplicates physically removed.
+
+---
+
+## (f) Grafana renders the posts dashboard
+
+```bash
+make grafana   # starts the profile-gated grafana service, prints the URL
+```
+
+Open <http://localhost:3000> (anonymous admin; no login). Open the **Bluesky posts (v1)**
+dashboard.
+
+**Observe:** the three panels render from ClickHouse — total deduped posts, posts/minute
+(event-time bars), and top languages. Panels query `bsky.posts_dedup`, so the replay
+duplicates from **(e)** do **not** inflate the counts.
+
+To confirm the cross-container query path headlessly (no browser), hit Grafana's datasource
+proxy directly:
+
+```bash
+curl -s -X POST http://localhost:3000/api/ds/query -H 'Content-Type: application/json' \
+  -d '{"queries":[{"refId":"A","datasource":{"type":"grafana-clickhouse-datasource","uid":"bsky-clickhouse"},"rawSql":"SELECT count() FROM bsky.posts_dedup","queryType":"sql","format":1}]}'
+```
+
+> **Dev auth note.** The clickhouse-server image disables network access for the `default`
+> user when no user/password env is set, so Grafana (a separate container) would get
+> `Code: 516 Authentication failed`. `clickhouse/config/users.d/dev_default_user.xml` re-opens
+> `default` over the network with an **empty password** (dev only; prod creds live in
+> `homelab-ops`), and the provisioned datasource sends `username: default`.
 
 ---
 
