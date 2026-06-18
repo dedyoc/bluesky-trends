@@ -1,0 +1,19 @@
+name: bsky
+version: "1.0.0"
+config-version: 2
+
+profile: bsky
+
+model-paths: ["models"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  bsky:
+    # No +schema override: models land in the profile's `bsky` database alongside the v1
+    # tables. (A `+schema` here gets concatenated onto the target schema by dbt-clickhouse,
+    # producing a `bsky_<suffix>` database — not what we want.)
+    staging:
+      +materialized: incremental
+    marts:
+      +materialized: incremental

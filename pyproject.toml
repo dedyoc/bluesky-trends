@@ -21,6 +21,18 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.7.0",
 ]
+# v2 batch layer (Iceberg/Dagster/dbt). Kept OUT of the `dev` group and the ingest Docker
+# image (which installs with `--no-dev`) so the v1 ingest service stays lean. Install with
+# `uv sync --group v2` for local v2 work.
+v2 = [
+    "dagster>=1.9,<1.10",
+    "dagster-dbt>=0.25,<0.26",
+    "dbt-core>=1.9,<1.10",
+    "dbt-clickhouse>=1.9,<1.10",
+    "pyiceberg[s3fs,pyarrow]>=0.7",
+    "clickhouse-connect>=0.8",
+    "pyarrow>=17",
+]
 
 [tool.uv]
 package = false
@@ -36,8 +48,18 @@ select = ["E", "W", "F", "I", "UP", "B", "ASYNC"]
 python_version = "3.12"
 strict = true
 warn_unused_configs = true
-files = ["ingest", "schemas", "tests"]
+files = ["ingest", "schemas", "tests", "dagster/bsky_dagster"]
+# `dagster/` is a source ROOT, not a package — it holds the `bsky_dagster` package so the
+# folder name never shadows the `dagster` pip import. mypy_path lets `import bsky_dagster`
+# resolve; there is no `dagster/__init__.py`.
+mypy_path = "dagster"
+
+# Third-party libs without bundled type stubs.
+[[tool.mypy.overrides]]
+module = ["dagster.*", "dagster_dbt.*", "pyiceberg.*", "clickhouse_connect.*", "pyarrow.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["dagster"]

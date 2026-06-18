@@ -6,7 +6,8 @@
 COMPOSE := docker compose -f docker-compose.dev.yml
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs run-ingest cursor inject-dlq ch ch-count grafana
+.PHONY: help up down logs run-ingest cursor inject-dlq ch ch-count grafana \
+	v2-up minio dagster dbt-build
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -41,3 +42,19 @@ ch-count: ## Show raw vs deduped post counts (proves ReplacingMergeTree collapse
 grafana: ## Start Grafana (profile-gated) and print the URL
 	$(COMPOSE) --profile grafana up -d grafana
 	@echo "Grafana: http://localhost:3000  (dashboard: Bluesky posts (v1))"
+
+# --- v2: Iceberg archive + Dagster/dbt batch ---
+
+minio: ## Start the v2 Iceberg stack (MinIO + bucket + REST catalog), detached
+	$(COMPOSE) --profile v2 up -d minio minio-init iceberg-rest
+	@echo "MinIO console: http://localhost:9101  Iceberg REST: http://localhost:8181"
+
+v2-up: up minio ## Start v1 infra (incl. ClickHouse) + the v2 Iceberg stack
+	@echo "v2 stack up. Run ingest (make run-ingest), then 'make dagster'."
+
+dagster: ## Run Dagster on the HOST (UI at http://localhost:3001); reads the host-published ports
+	cd dbt && DBT_PROFILES_DIR=. uv run --group v2 dbt parse  # refresh the dbt manifest for @dbt_assets
+	PYTHONPATH=dagster uv run --group v2 dagster dev -m bsky_dagster.definitions -p 3001
+
+dbt-build: ## Build the dbt staging+mart models and run their tests
+	cd dbt && DBT_PROFILES_DIR=. uv run --group v2 dbt build

@@ -12,6 +12,14 @@ Stage B (ClickHouse sink + Grafana) adds:
 - **(e)** SIGKILL replay duplicates collapse in the ReplacingMergeTree mart
 - **(f)** Grafana renders the posts dashboard from ClickHouse
 
+v2 (Iceberg archive + Dagster/dbt batch + asset checks) adds:
+
+- **(g)** posts archive `bsky.posts.v1` → Iceberg **bronze** (raw, append-only)
+- **(h)** bronze → ClickHouse landing → dbt **staging** (deduped) → **mart**; dbt tests pass
+- **(i)** bronze archival is offset-resumable (re-run archives 0; no replay)
+- **(j)** at-least-once bronze duplicates collapse in staging (ReplacingMergeTree)
+- **(k)** Dagster asset checks pass (bronze freshness, mart volume, stg null-rate)
+
 This is local-dev only (docker-compose). Nothing here deploys anything — k8s lives in
 `homelab-ops`. All commands are run from the repo root.
 
@@ -250,6 +258,71 @@ curl -s -X POST http://localhost:3000/api/ds/query -H 'Content-Type: application
 > `Code: 516 Authentication failed`. `clickhouse/config/users.d/dev_default_user.xml` re-opens
 > `default` over the network with an **empty password** (dev only; prod creds live in
 > `homelab-ops`), and the provisioned datasource sends `username: default`.
+
+---
+
+## v2 — Iceberg archive + Dagster/dbt batch
+
+v2 adds a batch layer: a Dagster asset archives `bsky.posts.v1` into an Iceberg **bronze**
+table (raw, append-only), a landing asset loads new bronze rows into ClickHouse, and dbt
+builds a deduped **staging** model and a `posts_by_lang_daily` **mart**, gated by Dagster
+asset checks. Dagster runs on the HOST (not a container) against the published ports. v2
+Python deps are in the `v2` uv group (kept out of the lean ingest image).
+
+```bash
+make v2-up        # v1 infra (incl. ClickHouse) + MinIO + Iceberg REST catalog
+make run-ingest   # ~30s to populate bsky.posts.v1, then Ctrl-C
+make dagster      # refreshes the dbt manifest, then serves the Dagster UI on :3001
+```
+
+In the Dagster UI (<http://localhost:3001>) materialize `posts_bronze`, then `posts_landing`,
+then the dbt assets — or run the chain headlessly (what the automated verify does).
+
+### (g) Posts archived into Iceberg bronze
+
+Materialize `posts_bronze`. **Observe:** `archived_this_run` ≈ the topic high-watermark, and
+`bronze_total_rows` matches. A malformed record (inject via `make inject-dlq`, which targets
+`bsky.dlq.v1`) is decoded to a `DlqRow` and never lands in bronze.
+
+### (h) bronze → landing → staging → mart (dbt build green)
+
+Materialize `posts_landing` (Iceberg → ClickHouse `posts_bronze_raw`), then `make dbt-build`.
+
+```bash
+make ch  # then:
+#   SELECT count() FROM posts_bronze_raw;          -- landing raw
+#   SELECT count() FROM stg_posts FINAL;           -- deduped staging
+#   SELECT sum(posts) FROM mart_posts_by_lang_daily FINAL;
+```
+
+**Observe:** `dbt build` is `PASS=… ERROR=0` (not_null + the singular FINAL-uniqueness tests);
+`stg_posts FINAL` == distinct `(did, rkey)` in landing; the mart has one row per `(day, lang)`.
+
+### (i) Bronze archival is offset-resumable
+
+Re-materialize `posts_bronze` without producing new data. **Observe:** `archived_this_run = 0`
+and `bronze_total_rows` is unchanged — the consumer committed Kafka offsets after the Iceberg
+append (write-before-commit), so a re-run replays nothing.
+
+### (j) At-least-once duplicates collapse in staging
+
+```bash
+make ch  # then:
+#   SELECT count() FROM (SELECT did,rkey,count() c FROM posts_bronze_raw GROUP BY did,rkey HAVING c>1);
+#   SELECT count() FROM posts_bronze_raw;   -- raw (with dup keys)
+#   SELECT count() FROM stg_posts FINAL;    -- == distinct (did,rkey)
+```
+
+**Observe:** landing holds some duplicate `(did, rkey)` groups (bounded bronze replay), but
+`stg_posts FINAL` equals the distinct-key count — `ReplacingMergeTree(ingest_ts)` collapses
+them, newest landing winning.
+
+### (k) Dagster asset checks pass
+
+In the UI, run the checks on `posts_bronze`, `stg_posts`, `mart_posts_by_lang_daily` (or via
+the asset job). **Observe:** `check_bronze_freshness` (event-time lag in window),
+`check_stg_null_rate` (0 empty key columns, blocking), and `check_mart_volume` (latest day vs
+trailing avg) all pass. dbt not_null/unique tests also surface as asset checks.
 
 ---
 

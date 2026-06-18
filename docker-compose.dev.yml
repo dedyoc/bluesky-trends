@@ -95,6 +95,7 @@ services:
         hard: 262144
     volumes:
       - ./clickhouse/init/001_posts.sql:/docker-entrypoint-initdb.d/001_posts.sql:ro
+      - ./clickhouse/init/002_v2_landing.sql:/docker-entrypoint-initdb.d/002_v2_landing.sql:ro
       - ./clickhouse/config/users.d/avro_sr.xml:/etc/clickhouse-server/users.d/avro_sr.xml:ro
       - ./clickhouse/config/users.d/dev_default_user.xml:/etc/clickhouse-server/users.d/dev_default_user.xml:ro
       - ./clickhouse/config/config.d/kafka.xml:/etc/clickhouse-server/config.d/kafka.xml:ro
@@ -124,6 +125,72 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  # --- v2 batch layer: Iceberg archive (MinIO + REST catalog) ---
+  # All profile-gated ("v2") so a plain `make up` stays v1-only; `make v2-up` adds them.
+  # Dagster runs on the HOST (`make dagster`) against these published ports, so it is NOT a
+  # compose service.
+
+  # S3-compatible object store backing the Iceberg warehouse (prod uses MinIO at
+  # minio.minio.svc:9000; this is the local stand-in). API port 9000 is remapped to host 9100
+  # to avoid clashing with ClickHouse's published native 9000.
+  minio:
+    profiles: ["v2"]
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports:
+      - "9100:9000" # S3 API (host) — 9100 to avoid the ClickHouse-native 9000 clash
+      - "9101:9001" # Console (host)
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+
+  # One-shot: create the `iceberg` bucket, then exit. Mirrors redpanda-init — other services
+  # wait on `service_completed_successfully`. Tolerates an already-existing bucket.
+  minio-init:
+    profiles: ["v2"]
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 minio minio12345
+        mc mb --ignore-existing local/iceberg
+        echo "bucket iceberg ready"
+
+  # Iceberg REST catalog (Confluent of catalogs — matches the prod REST-catalog shape).
+  # Backed by the MinIO bucket; warehouse root s3://iceberg/. Exposes the catalog API on 8181.
+  iceberg-rest:
+    profiles: ["v2"]
+    image: tabulario/iceberg-rest:1.6.0
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    environment:
+      CATALOG_WAREHOUSE: s3://iceberg/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio12345
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8181/v1/config || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
 
   # The ingest service itself. Gated behind the "ingest" profile so a plain
   # `docker compose up` (or `make up`) brings up ONLY infra — ingest is started
