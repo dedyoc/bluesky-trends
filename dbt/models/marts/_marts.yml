@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: mart_posts_by_lang_daily
+    description: >
+      Posts per (day, lang) with distinct author counts. Grain: one row per language per UTC
+      day. Incremental with a trailing 2-day rewindow for late data. Read with FINAL for exact
+      dedup before merges run.
+    columns:
+      - name: day
+        description: UTC calendar day of the post (event time).
+        tests: [not_null]
+      - name: lang
+        description: Language tag ('und' when the post declared none).
+        tests: [not_null]
+      - name: posts
+        description: Number of posts that day in that language.
+        tests: [not_null]
+      - name: authors
+        description: Distinct authors that day in that language.
+        tests: [not_null]
+    # (day, lang) uniqueness asserted by tests/assert_mart_lang_daily_unique.sql against FINAL.

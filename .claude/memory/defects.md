@@ -23,6 +23,25 @@
   Rule: marts over event data are incremental models with explicit unique_key.
 
 ## Entries
+- [2026-06-18] Bronze Kafka->Iceberg asset hung forever on a re-run with no new data — Cause:
+  the EOF-termination tracked partitions we'd SEEN DATA on (an `assigned` set filled only by
+  data messages), so on an already-consumed topic that set stayed empty and the
+  `assigned and eof>=assigned` break never fired; the loop polled None forever — Rule: derive
+  "drained" from the live `consumer.assignment()` (every assigned partition still emits one
+  EOF on a quiet topic with enable.partition.eof=True), not from observed-data partitions; add
+  a hard idle-seconds backstop in case assignment never settles. (see
+  dagster/bsky_dagster/assets/bronze.py drained())
+- [2026-06-18] Dagster `@asset` rejected `def f(context: AssetExecutionContext)` with
+  "Cannot annotate context parameter" — Cause: `from __future__ import annotations` stringizes
+  the annotation and Dagster's runtime context-type check can't resolve the string — Rule:
+  in modules with `from __future__ import annotations`, leave the asset/op `context` param
+  UNannotated (or drop it), or import the real type without the future-annotations stringizing.
+- [2026-06-18] PyIceberg `table.append(pyarrow_table)` raised "Mismatch in fields" — Cause:
+  the pyarrow batch's field nullability and tz-awareness must EXACTLY match the Iceberg table
+  schema: required Iceberg fields need non-nullable pyarrow fields, and an Iceberg
+  `TimestamptzType` needs pyarrow `timestamp("us", tz="UTC")` (plain `TimestampType` ↔ tz-naive)
+  — Rule: define the Iceberg `Schema` as the source of truth and mirror its required/optional +
+  timestamptz in the pyarrow batch schema field-for-field. (see transforms/bronze_schema.py)
 - [2026-06-17] Grafana -> ClickHouse failed with `Code: 516 Authentication failed` (HTTP 403)
   even though local clickhouse-client worked — Cause: the official clickhouse-server image
   entrypoint, when neither CLICKHOUSE_USER nor CLICKHOUSE_PASSWORD is set, logs "disabling

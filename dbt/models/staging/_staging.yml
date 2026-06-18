@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: bsky
+    schema: bsky
+    tables:
+      - name: posts_bronze_raw
+        description: >
+          Raw landing of Iceberg bronze posts, loaded by the Dagster posts_landing asset.
+          Append-only; may contain at-least-once duplicates from bronze replay.
+
+models:
+  - name: stg_posts
+    description: >
+      Typed, deduped posts — one row per (did, rkey). ReplacingMergeTree collapses replayed
+      duplicates by newest ingest_ts. Read with FINAL for exact dedup before merges run.
+    columns:
+      - name: did
+        description: Author repo DID.
+        tests: [not_null]
+      - name: rkey
+        description: Record key within the author's repo.
+        tests: [not_null]
+      - name: cid
+        description: Content identifier.
+        tests: [not_null]
+      - name: created_at
+        description: Event-time createdAt (UTC).
+        tests: [not_null]
+    # (did, rkey) uniqueness is asserted by the singular test tests/assert_stg_posts_unique.sql,
+    # which checks the deduped (FINAL) view — the raw ReplacingMergeTree table legitimately
+    # holds un-merged duplicates until a background merge runs.
