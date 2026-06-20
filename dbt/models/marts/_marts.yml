@@ -20,3 +20,45 @@ models:
         description: Distinct authors that day in that language.
         tests: [not_null]
     # (day, lang) uniqueness asserted by tests/assert_mart_lang_daily_unique.sql against FINAL.
+
+  - name: mart_likes_by_subject_daily
+    description: >
+      Likes per (day, subject_uri) with distinct liker counts. Grain: one row per liked post
+      per UTC day. Incremental with a trailing 2-day rewindow for late data. Read with FINAL
+      for exact dedup before merges run.
+    columns:
+      - name: day
+        description: UTC calendar day of the like (event time).
+        tests: [not_null]
+      - name: subject_uri
+        description: AT-URI of the liked post.
+        tests: [not_null]
+      - name: likes
+        description: Number of likes that day for that subject.
+        tests: [not_null]
+      - name: likers
+        description: Distinct likers that day for that subject.
+        tests: [not_null]
+    # (day, subject_uri) uniqueness asserted by
+    # tests/assert_mart_likes_subject_daily_unique.sql against FINAL.
+
+  - name: mart_follows_by_subject_daily
+    description: >
+      Follows per (day, subject_did) with distinct follower counts. Grain: one row per followed
+      account per UTC day. Incremental with a trailing 2-day rewindow for late data. Read with
+      FINAL for exact dedup before merges run.
+    columns:
+      - name: day
+        description: UTC calendar day of the follow (event time).
+        tests: [not_null]
+      - name: subject_did
+        description: DID of the followed account.
+        tests: [not_null]
+      - name: follows
+        description: Number of follows that day for that subject.
+        tests: [not_null]
+      - name: followers
+        description: Distinct followers that day for that subject.
+        tests: [not_null]
+    # (day, subject_did) uniqueness asserted by
+    # tests/assert_mart_follows_subject_daily_unique.sql against FINAL.

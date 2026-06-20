@@ -28,6 +28,7 @@ from bsky_dagster.dlq import DlqProducer
 from bsky_dagster.resources.iceberg import ensure_table, load_catalog
 from bsky_dagster.resources.kafka import build_consumer, build_deserializer
 from bsky_dagster.transforms.batch import BronzeBatch
+from bsky_dagster.transforms.bronze_schema import bronze_iceberg_schema, partition_spec
 from bsky_dagster.transforms.decode import DlqRow, decode_post
 from dagster import DailyPartitionsDefinition, MaterializeResult, asset
 
@@ -52,9 +53,17 @@ posts_daily_partitions = DailyPartitionsDefinition(start_date="2026-06-01", end_
 def posts_bronze() -> MaterializeResult:
     settings = Settings()
     catalog = load_catalog(settings)
-    table = ensure_table(catalog, settings)
-    deserializer = build_deserializer(settings)
-    consumer = build_consumer(settings)
+    table = ensure_table(
+        catalog,
+        settings,
+        table_name=settings.bronze_table,
+        schema=bronze_iceberg_schema(),
+        spec=partition_spec(),
+    )
+    deserializer = build_deserializer(settings, "bsky.posts.v1.avsc")
+    consumer = build_consumer(
+        settings, topic=settings.topic_posts, group=settings.bronze_consumer_group
+    )
     dlq = DlqProducer(settings)
 
     batch = BronzeBatch(settings.bronze_batch_max_rows, settings.bronze_batch_max_seconds)

@@ -23,6 +23,18 @@
   Rule: marts over event data are incremental models with explicit unique_key.
 
 ## Entries
+- [2026-06-20] check_mart_volume gave a spurious FAIL on a single-day mart — Cause: the
+  trailing-baseline query `avg(c) ... WHERE day < max(day)` runs over an EMPTY set when all
+  rows share one day, and ClickHouse `avg()` over no rows returns `NaN` (not NULL/0). The
+  no-baseline guard was `if not trailing:` and `not NaN` is `False` in Python, so NaN slipped
+  through and `latest >= 0.25 * NaN` evaluated False -> FAIL. This was a latent bug in the
+  merged posts check (posts only ever had 1 lang-day so `trailing` was falsy and it short-
+  circuited); surfaced when likes/follows ran on single-day data — Rule: guard the empty-
+  baseline case with `if not trailing or math.isnan(float(trailing)):` (NaN means "no trailing
+  days to compare", so pass). The shared helper `_mart_volume()` now covers posts/likes/follows.
+  (Separately: bronze_freshness FAILs are CORRECT when fixture data is genuinely older than
+  the 24h window — that is the staleness alarm working, not a defect.)
+  (see dagster/bsky_dagster/checks.py _mart_volume())
 - [2026-06-18] Bronze Kafka->Iceberg asset hung forever on a re-run with no new data — Cause:
   the EOF-termination tracked partitions we'd SEEN DATA on (an `assigned` set filled only by
   data messages), so on an already-consumed topic that set stayed empty and the

@@ -20,9 +20,14 @@ class Settings(BaseSettings):
     kafka_bootstrap: str = "localhost:19092"
     schema_registry_url: str = "http://localhost:8081"
     topic_posts: str = "bsky.posts.v1"
+    topic_likes: str = "bsky.likes.v1"
+    topic_follows: str = "bsky.follows.v1"
     topic_dlq: str = "bsky.dlq.v1"
-    # Dedicated consumer group for the bronze archiver; offsets are the resume cursor.
+    # Dedicated consumer group per event type for the bronze archiver; offsets are the resume
+    # cursor (one group per topic so likes/follows archive independently of posts).
     bronze_consumer_group: str = "dagster-bronze-posts"
+    bronze_consumer_group_likes: str = "dagster-bronze-likes"
+    bronze_consumer_group_follows: str = "dagster-bronze-follows"
 
     # Batch flush thresholds for the Kafka -> Iceberg consume (batched, never row-by-row):
     # flush when EITHER the row count or the idle-time bound is reached.
@@ -41,6 +46,8 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     iceberg_namespace: str = "bronze"
     bronze_table: str = "bronze.posts"
+    bronze_table_likes: str = "bronze.likes"
+    bronze_table_follows: str = "bronze.follows"
 
     # ClickHouse (host HTTP port; default user, empty password in dev).
     clickhouse_host: str = "localhost"
@@ -48,7 +55,9 @@ class Settings(BaseSettings):
     clickhouse_user: str = "default"
     clickhouse_password: str = ""
     clickhouse_database: str = "bsky"
-    # Landing table the dbt staging model reads from.
+    # Landing table the dbt staging model reads from (one per event type).
     landing_table: str = "posts_bronze_raw"
+    landing_table_likes: str = "likes_bronze_raw"
+    landing_table_follows: str = "follows_bronze_raw"
     # Async-batched insert size for the Iceberg -> ClickHouse landing load (never row-by-row).
     landing_batch_rows: int = 50_000

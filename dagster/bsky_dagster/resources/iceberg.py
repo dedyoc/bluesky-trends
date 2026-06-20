@@ -10,13 +10,11 @@ from __future__ import annotations
 from typing import cast
 
 from pyiceberg.catalog.rest import RestCatalog
+from pyiceberg.partitioning import PartitionSpec
+from pyiceberg.schema import Schema
 from pyiceberg.table import Table
 
 from bsky_dagster.config import Settings
-from bsky_dagster.transforms.bronze_schema import (
-    bronze_iceberg_schema,
-    partition_spec,
-)
 
 
 def load_catalog(settings: Settings) -> RestCatalog:
@@ -35,13 +33,19 @@ def load_catalog(settings: Settings) -> RestCatalog:
     )
 
 
-def ensure_table(catalog: RestCatalog, settings: Settings) -> Table:
-    """Create the bronze namespace+table (day-partitioned) if absent, then return it."""
+def ensure_table(
+    catalog: RestCatalog,
+    settings: Settings,
+    *,
+    table_name: str,
+    schema: Schema,
+    spec: PartitionSpec,
+) -> Table:
+    """Create the bronze namespace+``table_name`` (day-partitioned) if absent, then return it.
+
+    The schema and partition spec are passed in by the caller so one helper serves every
+    event type's bronze table (posts/likes/follows)."""
     catalog.create_namespace_if_not_exists(settings.iceberg_namespace)
-    if not catalog.table_exists(settings.bronze_table):
-        catalog.create_table(
-            settings.bronze_table,
-            schema=bronze_iceberg_schema(),
-            partition_spec=partition_spec(),
-        )
-    return cast(Table, catalog.load_table(settings.bronze_table))
+    if not catalog.table_exists(table_name):
+        catalog.create_table(table_name, schema=schema, partition_spec=spec)
+    return cast(Table, catalog.load_table(table_name))
