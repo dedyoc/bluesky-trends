@@ -41,3 +41,28 @@ def deserialized_post_no_langs() -> dict[str, Any]:
         "reply_parent": None,
         "reply_root": None,
     }
+
+
+@pytest.fixture
+def deserialized_like() -> dict[str, Any]:
+    """A valid deserialized like record (flat, mirroring bsky.likes.v1.avsc)."""
+    return {
+        "did": "did:plc:liker123",
+        "rkey": "3klikerkey",
+        "cid": "bafylike",
+        "created_at": datetime(2024, 1, 1, tzinfo=UTC),
+        "subject_uri": "at://did:plc:poster/app.bsky.feed.post/3kpostrkey",
+        "subject_cid": "bafypost",
+    }
+
+
+@pytest.fixture
+def deserialized_follow() -> dict[str, Any]:
+    """A valid deserialized follow record (flat, mirroring bsky.follows.v1.avsc)."""
+    return {
+        "did": "did:plc:follower123",
+        "rkey": "3kfollowkey",
+        "cid": "bafyfollow",
+        "created_at": datetime(2024, 1, 1, tzinfo=UTC),
+        "subject_did": "did:plc:followed456",
+    }

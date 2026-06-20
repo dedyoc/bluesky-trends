@@ -8,6 +8,14 @@ sources:
         description: >
           Raw landing of Iceberg bronze posts, loaded by the Dagster posts_landing asset.
           Append-only; may contain at-least-once duplicates from bronze replay.
+      - name: likes_bronze_raw
+        description: >
+          Raw landing of Iceberg bronze likes, loaded by the Dagster likes_landing asset.
+          Append-only; may contain at-least-once duplicates from bronze replay.
+      - name: follows_bronze_raw
+        description: >
+          Raw landing of Iceberg bronze follows, loaded by the Dagster follows_landing asset.
+          Append-only; may contain at-least-once duplicates from bronze replay.
 
 models:
   - name: stg_posts
@@ -30,3 +38,47 @@ models:
     # (did, rkey) uniqueness is asserted by the singular test tests/assert_stg_posts_unique.sql,
     # which checks the deduped (FINAL) view — the raw ReplacingMergeTree table legitimately
     # holds un-merged duplicates until a background merge runs.
+
+  - name: stg_likes
+    description: >
+      Typed, deduped likes — one row per (did, rkey). ReplacingMergeTree collapses replayed
+      duplicates by newest ingest_ts. Read with FINAL for exact dedup before merges run.
+    columns:
+      - name: did
+        description: Author (liker) repo DID.
+        tests: [not_null]
+      - name: rkey
+        description: Record key within the author's repo.
+        tests: [not_null]
+      - name: cid
+        description: Content identifier.
+        tests: [not_null]
+      - name: created_at
+        description: Event-time createdAt (UTC).
+        tests: [not_null]
+      - name: subject_uri
+        description: AT-URI of the liked post.
+        tests: [not_null]
+    # (did, rkey) uniqueness asserted by tests/assert_stg_likes_unique.sql against FINAL.
+
+  - name: stg_follows
+    description: >
+      Typed, deduped follows — one row per (did, rkey). ReplacingMergeTree collapses replayed
+      duplicates by newest ingest_ts. Read with FINAL for exact dedup before merges run.
+    columns:
+      - name: did
+        description: Author (follower) repo DID.
+        tests: [not_null]
+      - name: rkey
+        description: Record key within the author's repo.
+        tests: [not_null]
+      - name: cid
+        description: Content identifier.
+        tests: [not_null]
+      - name: created_at
+        description: Event-time createdAt (UTC).
+        tests: [not_null]
+      - name: subject_did
+        description: DID of the followed account.
+        tests: [not_null]
+    # (did, rkey) uniqueness asserted by tests/assert_stg_follows_unique.sql against FINAL.

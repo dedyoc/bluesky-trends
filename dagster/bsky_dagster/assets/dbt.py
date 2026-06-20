@@ -20,15 +20,26 @@ DBT_PROJECT_DIR = pathlib.Path(__file__).resolve().parents[3] / "dbt"
 DBT_MANIFEST = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 
+# Each dbt source (the ClickHouse landing table) maps onto the upstream Dagster landing asset
+# that loads it, so Dagster knows landing -> staging -> mart ordering per event type. A source
+# not in this map raises KeyError — a loud failure if a new vertical is added without wiring.
+_SOURCE_TO_LANDING: dict[str, str] = {
+    "posts_bronze_raw": "posts_landing",
+    "likes_bronze_raw": "likes_landing",
+    "follows_bronze_raw": "follows_landing",
+}
+
+
 class _Translator(DagsterDbtTranslator):
-    """Map the dbt source ``bsky.posts_bronze_raw`` onto the upstream ``posts_landing`` asset
-    so Dagster knows landing -> staging -> mart ordering."""
+    """Map each dbt landing source onto its upstream Dagster landing asset.
+
+    See ``_SOURCE_TO_LANDING`` for the per-event-type source -> landing-asset mapping."""
 
     def get_asset_key(self, dbt_resource_props: Mapping[str, Any]) -> Any:
         from dagster import AssetKey
 
         if dbt_resource_props["resource_type"] == "source":
-            return AssetKey(["posts_landing"])
+            return AssetKey([_SOURCE_TO_LANDING[dbt_resource_props["name"]]])
         return super().get_asset_key(dbt_resource_props)
 
 

@@ -31,23 +31,28 @@ def _from_avro_dict(obj: dict[str, Any] | None, _ctx: Any) -> dict[str, Any] | N
     return obj
 
 
-def build_deserializer(settings: Settings) -> AvroDeserializer:
+def build_deserializer(settings: Settings, avsc_filename: str) -> AvroDeserializer:
+    """Build an AvroDeserializer for one event type's reader schema (e.g. bsky.posts.v1.avsc)."""
     sr = SchemaRegistryClient({"url": settings.schema_registry_url})
-    schema_str = (_AVRO_DIR / "bsky.posts.v1.avsc").read_text()
+    schema_str = (_AVRO_DIR / avsc_filename).read_text()
     deserializer: AvroDeserializer = AvroDeserializer(sr, schema_str, _from_avro_dict)
     return deserializer
 
 
-def build_consumer(settings: Settings) -> Consumer:
-    """Manual-commit consumer reading from the start for an unseen group (earliest)."""
+def build_consumer(settings: Settings, *, topic: str, group: str) -> Consumer:
+    """Manual-commit consumer reading from the start for an unseen group (earliest).
+
+    Topic and consumer group are per event type so likes/follows archive independently of
+    posts; the committed offset is each group's durable resume cursor.
+    """
     consumer = Consumer(
         {
             "bootstrap.servers": settings.kafka_bootstrap,
-            "group.id": settings.bronze_consumer_group,
+            "group.id": group,
             "enable.auto.commit": False,
             "auto.offset.reset": "earliest",
             "enable.partition.eof": True,  # so a drained run can stop at EOF
         }
     )
-    consumer.subscribe([settings.topic_posts])
+    consumer.subscribe([topic])
     return consumer
