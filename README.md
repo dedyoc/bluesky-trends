@@ -4,8 +4,8 @@ Real-time social analytics on the [Bluesky](https://bsky.app) firehose. The pipe
 the Bluesky Jetstream websocket, validates each record against versioned schemas, and turns the
 stream into both real-time dashboards and batch analytics tables — trending posts, likes, and
 follows. This repository holds the pipeline code only (ingest service, Dagster assets, dbt
-models, and the future Flink job and API); Kubernetes manifests live in a separate `homelab-ops`
-repo.
+models, and the future Flink job and API); Kubernetes manifests live in a separate
+[`bluesky-trends-deploy`](https://github.com/dedyoc/bluesky-trends-deploy) repo.
 
 ## Architecture
 
@@ -113,8 +113,8 @@ For the end-to-end v1 sign-off runbook, see [VERIFY.md](VERIFY.md).
 
 ## Project conventions
 
-- **GitOps deploy.** Kubernetes manifests live in the separate `homelab-ops` repo, never here.
-  CI builds images; deployment tags are bumped there. Do not add k8s YAML to this repo beyond
+- **GitOps deploy.** Kubernetes manifests live in the separate `bluesky-trends-deploy` repo, never
+  here. CI builds images; image digests are bumped there. Do not add k8s YAML to this repo beyond
   local `docker-compose` dev files.
 - **Streaming safety (non-negotiable).** Persist the Jetstream cursor only *after* a successful
   Kafka produce-ack; in the bronze archiver, commit Kafka offsets only *after* the Iceberg
@@ -128,6 +128,8 @@ See [CLAUDE.md](CLAUDE.md) and `.claude/memory/standards.md` for the full rules.
 
 ## Deployment (TODO)
 
-Not yet implemented — part of the planned v3 ops work. Container image publishing (CI build plus
-a deployment tag bump in the `homelab-ops` repo) and the **k3s deployment** are not set up yet.
-Until then, the pipeline runs only via the local `docker-compose` dev stack described above.
+In progress. The pipeline is being ported to a single-node **k3s** homelab as tenant `bsky`,
+managed by ArgoCD from [`bluesky-trends-deploy`](https://github.com/dedyoc/bluesky-trends-deploy),
+slice by slice (ingest, hot path, batch, Flink, metrics). Container image publishing (CI build
+to ghcr.io, then a digest bump in that repo) is not set up yet. Until then, the pipeline runs
+only via the local `docker-compose` dev stack described above.

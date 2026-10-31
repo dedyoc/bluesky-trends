@@ -21,7 +21,7 @@ v2 (Iceberg archive + Dagster/dbt batch + asset checks) adds:
 - **(k)** Dagster asset checks pass (bronze freshness, mart volume, stg null-rate)
 
 This is local-dev only (docker-compose). Nothing here deploys anything — k8s lives in
-`homelab-ops`. All commands are run from the repo root.
+`bluesky-trends-deploy`. All commands are run from the repo root.
 
 ## Topology
 
@@ -256,8 +256,8 @@ curl -s -X POST http://localhost:3000/api/ds/query -H 'Content-Type: application
 > **Dev auth note.** The clickhouse-server image disables network access for the `default`
 > user when no user/password env is set, so Grafana (a separate container) would get
 > `Code: 516 Authentication failed`. `clickhouse/config/users.d/dev_default_user.xml` re-opens
-> `default` over the network with an **empty password** (dev only; prod creds live in
-> `homelab-ops`), and the provisioned datasource sends `username: default`.
+> `default` over the network with an **empty password** (dev only; on k3s, creds are
+> Secrets created by hand in namespace `bsky`, never in any repo), and the provisioned datasource sends `username: default`.
 
 ---
 

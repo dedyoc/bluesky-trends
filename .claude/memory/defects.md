@@ -62,8 +62,8 @@
   also sent no username/password — Rule: in dev, explicitly open the `default` user over the
   network with an empty password via users.d (clickhouse/config/users.d/dev_default_user.xml)
   AND set `username: default` in the provisioned datasource; verify cross-container access with
-  the Grafana /api/ds/query proxy, not just local clickhouse-client. (Prod creds live in
-  homelab-ops, never here.)
+  the Grafana /api/ds/query proxy, not just local clickhouse-client. (On k3s, creds are
+  Secrets created by hand in namespace `bsky`, never in any repo.)
 - [2026-06-17] ClickHouse refused to start the Kafka-engine init (`Code: 115 UNKNOWN_SETTING:
   Unknown setting 'kafka_auto_offset_reset' for storage Kafka`) — Cause: assumed offset-reset
   was a `CREATE TABLE ... SETTINGS kafka_*` option; it is a librdkafka *consumer* property, set

@@ -2,14 +2,16 @@
 
 Real-time social analytics on the Bluesky firehose. This repo holds CODE ONLY:
 ingest service, Flink trend job, Dagster assets, dbt models, FastAPI trends API.
-Kubernetes manifests live in the separate `homelab-ops` repo — never write k8s
-YAML here beyond local dev (docker-compose) files.
+Kubernetes manifests live in the separate `bluesky-trends-deploy` repo
+(`~/bluesky-trends-deploy`, tenant `bsky` on node0) — never write k8s YAML here beyond
+local dev (docker-compose) files.
 
 ## Always-true rules
 - Never edit generated code (`*_pb2.py`, `*.gen.go`, dbt `target/`), `.venv/`, or vendored deps.
 - Never read or print secrets: `.env`, kubeconfig, MinIO/ClickHouse credentials.
-- Deployment is GitOps: CI builds images; tags are bumped in `homelab-ops`. Never
-  suggest `kubectl apply` or manual deploys from this repo.
+- Deployment is GitOps: CI builds images; image digests are bumped by hand in
+  `bluesky-trends-deploy` (no Image Updater for now). Never suggest `kubectl apply` or
+  manual deploys from this repo.
 - Run `ruff format && ruff check && mypy` (Python) before claiming done; tests via `pytest`.
 - Plan mode for any change touching >1 file. Show the plan, wait for "execute".
 - When I correct a mistake, append it to @.claude/memory/defects.md before continuing.

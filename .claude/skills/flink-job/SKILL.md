@@ -26,6 +26,7 @@ If we're still in v1/v2, say so and ask whether to proceed anyway.
 - Local test: bounded source from fixture file through the same pipeline topology.
 
 ## Deployment note
-Job image is built by CI here; the FlinkDeployment CRD lives in homelab-ops.
+Job image is built by CI here; the `FlinkDeployment` resource lives in bluesky-trends-deploy
+(the Flink operator and its CRD are installed from the homelab platform repo).
 After changing parallelism/state shape, note the upgrade path (savepoint required?) in
 the PR description and in `_state.md`.
