@@ -126,10 +126,54 @@ For the end-to-end v1 sign-off runbook, see [VERIFY.md](VERIFY.md).
 
 See [CLAUDE.md](CLAUDE.md) and `.claude/memory/standards.md` for the full rules.
 
-## Deployment (TODO)
+## Deployment contract
 
-In progress. The pipeline is being ported to a single-node **k3s** homelab as tenant `bsky`,
-managed by ArgoCD from [`bluesky-trends-deploy`](https://github.com/dedyoc/bluesky-trends-deploy),
-slice by slice (ingest, hot path, batch, Flink, metrics). Container image publishing (CI build
-to ghcr.io, then a digest bump in that repo) is not set up yet. Until then, the pipeline runs
-only via the local `docker-compose` dev stack described above.
+`bluesky-trends-deploy` builds its manifests from this section. It is the interface between
+this repo (code + image) and the deploy repo (k8s), so any change to `ingest/config.py` must
+update this section in the same commit.
+
+### Image
+
+| | |
+|---|---|
+| Image | `ghcr.io/dedyoc/bluesky-trends-ingest` |
+| Tags | full git SHA of the commit on `main` (e.g. `:<40-char sha>`); no `latest` |
+| Built by | `.github/workflows/ingest-image.yml` on push to `main` touching ingest/schemas/Dockerfile/deps, or manual dispatch |
+| Pin by | **digest**. The workflow prints `ghcr.io/dedyoc/bluesky-trends-ingest@sha256:...` in its log and job summary; copy it into `bluesky-trends-deploy` by hand (no Image Updater) |
+| Command | image default (`uv run --no-dev python -m ingest.main`); no args needed |
+
+Runtime shape: one long-running process, **single replica** (one Jetstream cursor per
+`INGEST_STREAM_NAME`; two replicas sharing a stream name would fight over the cursor). No
+listening ports. Metrics/health are structured JSON logs on stdout (`last_event_ts` + counters).
+Needs egress to Kafka, the schema registry, Postgres, and outbound WSS to the Jetstream host.
+SIGTERM triggers a graceful stop (flush producer, persist cursor).
+
+The GHCR package is **private** after its first push: either make it public in the package
+settings or give the `bsky` namespace an `imagePullSecret`.
+
+### Environment variables
+
+All variables use the `INGEST_` prefix. **Required** variables have no default; the process
+exits at startup with a `ValidationError` naming any that are missing.
+
+| Variable | Meaning | Default | Secret? |
+|---|---|---|---|
+| `INGEST_KAFKA_BOOTSTRAP` | Kafka bootstrap servers (`host:port[,host:port]`) | **required** | no |
+| `INGEST_SCHEMA_REGISTRY_URL` | Confluent-compatible schema registry (Karapace) base URL | **required** | no |
+| `INGEST_POSTGRES_DSN` | Postgres DSN for the cursor store (`postgresql://user:pass@host:5432/db`) | **required** | **yes** (has credentials) |
+| `INGEST_JETSTREAM_URL` | Jetstream websocket subscribe endpoint | `wss://jetstream2.us-east.bsky.network/subscribe` | no |
+| `INGEST_STREAM_NAME` | Cursor-row key in Postgres; change it and ingest starts from "now" with a fresh cursor | `jetstream-main` | no |
+| `INGEST_CURSOR_CHECKPOINT_ACKS` | Persist the cursor after this many produce-acks… | `100` | no |
+| `INGEST_CURSOR_CHECKPOINT_SECONDS` | …or after this many seconds, whichever comes first | `2.0` | no |
+| `INGEST_BACKOFF_INITIAL_SECONDS` | Reconnect backoff: first delay | `1.0` | no |
+| `INGEST_BACKOFF_MAX_SECONDS` | Reconnect backoff: delay cap | `60.0` | no |
+| `INGEST_BACKOFF_JITTER_RATIO` | Reconnect backoff: ± jitter fraction | `0.2` | no |
+| `INGEST_STATS_INTERVAL_SECONDS` | Interval between stats log lines | `10.0` | no |
+| `INGEST_TOPIC_POSTS` | Kafka topic for posts | `bsky.posts.v1` | no |
+| `INGEST_TOPIC_LIKES` | Kafka topic for likes | `bsky.likes.v1` | no |
+| `INGEST_TOPIC_FOLLOWS` | Kafka topic for follows | `bsky.follows.v1` | no |
+| `INGEST_TOPIC_DLQ` | Dead-letter topic for events that fail validation | `bsky.dlq.v1` | no |
+| `INGEST_WANTED_COLLECTIONS` | Jetstream collections to subscribe to (JSON list) | `["app.bsky.feed.post","app.bsky.feed.like","app.bsky.graph.follow"]` | no |
+
+Topics must already exist; ingest does not create them. Avro schemas are registered in the
+schema registry on first produce.

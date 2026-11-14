@@ -1,7 +1,12 @@
-"""Runtime configuration, read from the environment.
+"""Runtime configuration, read from the environment (prefix ``INGEST_``).
 
-Defaults target the in-cluster systems (homelab-ops); docker-compose.dev.yml overrides
-them via env for local runs.
+DEPLOYMENT CONTRACT: every field here is an env var the ingest image reads, documented in
+README.md "Deployment contract" — bluesky-trends-deploy builds its manifests from that
+section. Any change to a field (add/rename/default) MUST update the README in the same commit.
+
+The three infrastructure endpoints (Kafka bootstrap, schema registry, Postgres DSN) are
+REQUIRED with no default: a missing var fails loudly at startup instead of silently dialing a
+wrong host. docker-compose.dev.yml sets them for local runs; k8s sets them in the deploy repo.
 """
 
 from __future__ import annotations
@@ -13,12 +18,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="INGEST_", env_file=".env", extra="ignore")
 
-    # Kafka / Schema Registry
-    kafka_bootstrap: str = "bsky-kafka-bootstrap.kafka:9092"
-    schema_registry_url: str = "http://bsky-kafka-bootstrap.kafka:8081"
+    # Kafka / Schema Registry (required)
+    kafka_bootstrap: str
+    schema_registry_url: str
 
-    # Postgres cursor store
-    postgres_dsn: str = "postgresql://bsky:bsky@localhost:5432/bsky_ingest"
+    # Postgres cursor store (required; contains credentials -> a Secret in k8s)
+    postgres_dsn: str
 
     # Jetstream source (us-east primary per v1 decision)
     jetstream_url: str = "wss://jetstream2.us-east.bsky.network/subscribe"
@@ -49,3 +54,10 @@ class Settings(BaseSettings):
             "app.bsky.graph.follow",
         )
     )
+
+
+def load_settings() -> Settings:
+    """Build Settings from the environment; raises ValidationError if a required var is unset."""
+    # mypy sees the required fields as missing constructor args; pydantic-settings fills
+    # them from INGEST_* env vars at runtime.
+    return Settings()  # type: ignore[call-arg]

@@ -28,7 +28,7 @@ from typing import Any
 import structlog
 from pydantic import ValidationError
 
-from ingest.config import Settings
+from ingest.config import load_settings
 from ingest.parse import to_model
 from ingest.producer import IngestProducer, serialize_raw
 
@@ -43,7 +43,7 @@ def _collection(event: dict[str, Any]) -> str:
 
 
 def main() -> None:
-    settings = Settings()
+    settings = load_settings()
     event: dict[str, Any] = json.loads(_FIXTURE.read_text())
     collection = _collection(event)
 
