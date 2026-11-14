@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from ingest.config import Settings
 from ingest.jetstream_client import backoff_delay, build_url
+from tests._settings import make_settings
 
 
 def _settings() -> Settings:
-    return Settings(
+    return make_settings(
         backoff_initial_seconds=1.0,
         backoff_max_seconds=60.0,
         backoff_jitter_ratio=0.2,
@@ -35,7 +36,7 @@ def test_backoff_jitter_bounds() -> None:
 
 
 def test_backoff_never_negative() -> None:
-    s = Settings(backoff_initial_seconds=0.0, backoff_jitter_ratio=1.0)
+    s = make_settings(backoff_initial_seconds=0.0, backoff_jitter_ratio=1.0)
     assert backoff_delay(0, s, rand=0.0) >= 0.0
 
 

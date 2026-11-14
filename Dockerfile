@@ -1,6 +1,7 @@
 FROM python:3.12-slim-bookworm
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Pinned (not :latest) so CI image builds are reproducible; bump deliberately.
+COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /bin/uv
 
 ENV PYTHONUNBUFFERED=1 \
     UV_SYSTEM_PYTHON=1

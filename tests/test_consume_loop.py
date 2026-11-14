@@ -17,6 +17,7 @@ from ingest.main import _consume, _CursorCheckpointer
 from ingest.metrics import Metrics
 from ingest.producer import DeliveryCallback
 from schemas.models import BskyFollow, BskyLike, BskyPost
+from tests._settings import make_settings
 
 
 class FakeStore:
@@ -67,7 +68,7 @@ class FakeClient:
 
 
 def _settings() -> Settings:
-    return Settings(cursor_checkpoint_acks=1, cursor_checkpoint_seconds=0.0)
+    return make_settings(cursor_checkpoint_acks=1, cursor_checkpoint_seconds=0.0)
 
 
 async def _drive(events: list[dict[str, Any]]) -> tuple[FakeProducer, FakeStore]:

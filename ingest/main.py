@@ -18,7 +18,7 @@ from typing import Any, Protocol
 import structlog
 from pydantic import ValidationError
 
-from ingest.config import Settings
+from ingest.config import Settings, load_settings
 from ingest.cursor_store import CursorStore
 from ingest.jetstream_client import JetstreamClient
 from ingest.metrics import Metrics
@@ -205,7 +205,7 @@ async def run(settings: Settings, stop: asyncio.Event) -> None:
 
 
 def main() -> None:
-    settings = Settings()
+    settings = load_settings()
     stop = asyncio.Event()
 
     async def _amain() -> None:
