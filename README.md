@@ -175,5 +175,18 @@ exits at startup with a `ValidationError` naming any that are missing.
 | `INGEST_TOPIC_DLQ` | Dead-letter topic for events that fail validation | `bsky.dlq.v1` | no |
 | `INGEST_WANTED_COLLECTIONS` | Jetstream collections to subscribe to (JSON list) | `["app.bsky.feed.post","app.bsky.feed.like","app.bsky.graph.follow"]` | no |
 
-Topics must already exist; ingest does not create them. Avro schemas are registered in the
-schema registry on first produce.
+### Prerequisites
+
+Ingest creates **nothing** in the systems it talks to (except schema registrations). The deploy
+side must provide all of this before the pod starts, or it will crash-loop or fail on first write:
+
+| Prerequisite | Details | Without it |
+|---|---|---|
+| Kafka topics | `bsky.posts.v1`, `bsky.likes.v1`, `bsky.follows.v1`, `bsky.dlq.v1` (or whatever the `INGEST_TOPIC_*` vars name). With Strimzi: one `KafkaTopic` each. | Deliveries fail (`produce_failed` logs) and the saved cursor stops advancing: nothing lost, but no progress. Don't rely on broker topic auto-create. |
+| Schema registry | Confluent-compatible (Karapace) at `INGEST_SCHEMA_REGISTRY_URL`. Ingest auto-registers its Avro schemas (`schemas/avro/*.avsc`) on first produce, so the registry must allow registration. | Serializer fails on the first event of each type. |
+| Postgres database + cursor table | A database/user matching `INGEST_POSTGRES_DSN`, with the table from [`ingest/sql/001_init.sql`](ingest/sql/001_init.sql) applied (`CREATE TABLE IF NOT EXISTS ingest_cursors ...`, idempotent, safe to re-run). Apply it via a Job, an init container, or the Postgres operator's bootstrap SQL. In dev, docker-compose mounts it into `docker-entrypoint-initdb.d`; nothing does that in k8s. | First cursor checkpoint fails: no zero-gap resume. |
+| Secret for the DSN | `INGEST_POSTGRES_DSN` contains credentials: a k8s Secret created by hand in namespace `bsky`, never committed to any repo. | Pod fails at startup (`ValidationError: postgres_dsn Field required`). |
+| Egress | Outbound to Kafka, the schema registry, Postgres, and WSS to the `INGEST_JETSTREAM_URL` host. | Jetstream: reconnect loop with backoff, no events. Postgres: pod fails at startup (cursor-store connect). Kafka/registry: as in the rows above. |
+
+Recommended pod settings: `replicas: 1` with `strategy: Recreate`, so a rollout never runs two
+pods writing the same `INGEST_STREAM_NAME` cursor at once.
